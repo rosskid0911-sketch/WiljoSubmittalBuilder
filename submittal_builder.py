@@ -92,6 +92,9 @@ def draw_logo_fit_box(c, logo_filename, left_x, top_y, max_width_in=1.6, max_hei
         return safe_h
 
 def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, project, submitter_name):
+    """
+    Letter-style binder cover with logo between two full-width lines, then body.
+    """
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     c = canvas.Canvas(tmp.name, pagesize=LETTER)
     margin = 0.9 * inch
@@ -99,21 +102,28 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
     y = LETTER_H - margin
     page_w, _ = LETTER
 
-    # Top line
+    # --- Top full-width break line (slightly above logo) ---
     c.setStrokeColorRGB(0, 0, 0)
     c.setLineWidth(1)
     top_line_y = y + 0.20 * inch
     c.line(x, top_line_y, page_w - x, top_line_y)
 
-    # Logo
-    drawn_h_in = draw_logo_fit_box(c, "wiljo_logo.png", left_x=x, top_y=y, max_width_in=1.6, max_height_in=0.75)
+    # --- Logo (fit inside header box) ---
+    drawn_h_in = draw_logo_fit_box(
+        c,
+        "wiljo_logo.png",
+        left_x=x,
+        top_y=y,
+        max_width_in=1.6,
+        max_height_in=0.75,
+    )
 
-    # Bottom line
+    # --- Bottom full-width break line (just below logo) ---
     header_gap_in = 0.20
     bottom_line_y = y - (drawn_h_in + header_gap_in) * inch
     c.line(x, bottom_line_y, page_w - x, bottom_line_y)
 
-    # Body start
+    # --- Body starts below line ---
     body_gap_in = 0.25
     body_top_y = bottom_line_y - (body_gap_in * inch)
 
@@ -122,7 +132,7 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
     c.drawString(x, body_top_y, date_str)
     text_y = body_top_y - 28
 
-    # Recipient
+    # Recipient block
     c.setFont(FONT_REG, 12)
     for line in [to_name, to_company, to_addr1, to_addr2]:
         if line and line.strip():
@@ -130,7 +140,7 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
             text_y -= 18
     text_y -= 10
 
-    # Re:
+    # Re: Project
     c.setFont(FONT_BOLD, 12)
     c.drawString(x, text_y, f"Re: {project}")
     text_y -= 28
@@ -139,12 +149,16 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
     text_y = draw_wrapped_text(
         c,
         "We are submitting the following materials for the architect’s review and approval:",
-        x, text_y, max_width=(LETTER_W - 2 * margin),
-        font=FONT_REG, size=12, leading=16
+        x,
+        text_y,
+        max_width=(LETTER_W - 2 * margin),
+        font=FONT_REG,
+        size=12,
+        leading=16,
     )
     text_y -= 10
 
-    # Bulleted spec sections
+    # Bulleted Spec Sections
     bullet = u"\u2022"
     c.setFont(FONT_REG, 12)
     max_width = LETTER_W - 2 * margin
@@ -158,6 +172,8 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
             c.drawString(x + (0 if i_line == 0 else 18), text_y, l)
             text_y -= 16
         text_y -= 2
+
+        # Overflow safety
         if text_y < 120:
             footer_text = "Wiljo Interiors, Inc.   |   109 NE 38th Street, Oklahoma City, OK 73105"
             c.setFont(FONT_REG, 10)
@@ -204,7 +220,7 @@ def generate_section_cover(spec_section, product_name):
     return buf
 
 # ---------- UI ----------
-st.title("📄 Wiljo Submittal Builder")
+st.title("Wiljo Submittal Builder")
 
 # Binder info
 st.header("1) Binder Cover Information")
