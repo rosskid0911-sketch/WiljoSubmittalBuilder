@@ -1,7 +1,11 @@
-[server]
-headless = true
-runOnSave = true
-maxUploadSize = 200
-
-[browser]
-gatherUsageStats = false
+your-repo/
+│   submittal_builder.py   <-- must be here (root)
+│   requirements.txt
+│
+├── .streamlit/
+│     config.toml
+├── fonts/
+│     LiberationSerif-Regular.ttf
+│     LiberationSerif-Bold.ttf
+│
+└── wiljo_logo.png
