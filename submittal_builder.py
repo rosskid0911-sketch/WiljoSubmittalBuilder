@@ -1,4 +1,4 @@
-# submittal_builder.py (cloud-ready for Streamlit Community Cloud)
+# submittal_builder.py — Streamlit Cloud–ready
 import streamlit as st
 from PyPDF2 import PdfMerger
 from reportlab.lib.pagesizes import LETTER
@@ -12,6 +12,7 @@ import tempfile
 import io
 import os
 import sys
+import re
 import datetime
 
 # ---------- Page config ----------
@@ -19,7 +20,7 @@ st.set_page_config(page_title="Wiljo Submittal Builder", layout="centered")
 
 # ---------- Helpers ----------
 def resource_path(*parts):
-    # On Streamlit Cloud, use repo-relative paths
+    # Repo-relative path (works on Cloud and local)
     base = os.path.dirname(__file__)
     return os.path.join(base, *parts)
 
@@ -42,6 +43,21 @@ try:
 except Exception:
     PIL_OK = False
 
+def load_logo_imagereader(filename="wiljo_logo.png"):
+    """Robustly load a bundled logo as ImageReader."""
+    p = resource_path(filename)
+    if os.path.exists(p):
+        try:
+            return ImageReader(p)
+        except Exception:
+            pass
+    if os.path.exists(filename):
+        try:
+            return ImageReader(filename)
+        except Exception:
+            pass
+    return None
+
 def draw_wrapped_text(c, text, x, y, max_width, font=FONT_REG, size=12, leading=16):
     c.setFont(font, size)
     chars = max(1, int(max_width / (size * 0.5)))
@@ -51,49 +67,43 @@ def draw_wrapped_text(c, text, x, y, max_width, font=FONT_REG, size=12, leading=
     return y
 
 def draw_logo_fit_box(c, logo_filename, left_x, top_y, max_width_in=1.6, max_height_in=0.75):
-    logo_path = resource_path(logo_filename)
-    if not os.path.exists(logo_path):
+    ir = load_logo_imagereader(logo_filename)
+    if ir is None:
+        try:
+            st.info(f"Logo not found (looking for '{logo_filename}').")
+        except Exception:
+            pass
         return 0.0
+
     try:
-        if PIL_OK:
-            img = Image.open(logo_path)
-            ow, oh = img.size if img else (0, 0)
-        else:
-            ow, oh = (400, 200)
-        if ow <= 0 or oh <= 0:
-            return 0.0
-        box_w = float(max_width_in) * inch
-        box_h = float(max_height_in) * inch
-        scale = min(box_w / ow, box_h / oh)
-        draw_w = ow * scale
-        draw_h = oh * scale
-        c.drawImage(
-            ImageReader(logo_path),
-            left_x,
-            top_y - draw_h,
-            width=draw_w,
-            height=draw_h,
-            preserveAspectRatio=True,
-            mask="auto",
-        )
-        return draw_h / inch
+        ow, oh = ir.getSize()
     except Exception:
-        safe_w = min(max_width_in, 1.2)
-        safe_h = min(max_height_in, 0.6)
-        c.drawImage(
-            ImageReader(logo_path),
-            left_x,
-            top_y - safe_h * inch,
-            width=safe_w * inch,
-            height=safe_h * inch,
-            preserveAspectRatio=True,
-            mask="auto",
-        )
-        return safe_h
+        ow, oh = (400, 200)
+
+    if ow <= 0 or oh <= 0:
+        return 0.0
+
+    box_w = float(max_width_in) * inch
+    box_h = float(max_height_in) * inch
+    scale = min(box_w / ow, box_h / oh)
+    draw_w = ow * scale
+    draw_h = oh * scale
+
+    c.drawImage(
+        ir,
+        left_x,
+        top_y - draw_h,   # y is bottom-left in ReportLab
+        width=draw_w,
+        height=draw_h,
+        preserveAspectRatio=True,
+        mask="auto",
+    )
+    return draw_h / inch
 
 def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, project, submitter_name):
     """
     Letter-style binder cover with logo between two full-width lines, then body.
+    Returns a temporary file path to the PDF page.
     """
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     c = canvas.Canvas(tmp.name, pagesize=LETTER)
@@ -102,13 +112,13 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
     y = LETTER_H - margin
     page_w, _ = LETTER
 
-    # --- Top full-width break line (slightly above logo) ---
+    # Top break line (above logo)
     c.setStrokeColorRGB(0, 0, 0)
     c.setLineWidth(1)
     top_line_y = y + 0.20 * inch
     c.line(x, top_line_y, page_w - x, top_line_y)
 
-    # --- Logo (fit inside header box) ---
+    # Logo
     drawn_h_in = draw_logo_fit_box(
         c,
         "wiljo_logo.png",
@@ -118,12 +128,12 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
         max_height_in=0.75,
     )
 
-    # --- Bottom full-width break line (just below logo) ---
+    # Bottom break line (below logo)
     header_gap_in = 0.20
     bottom_line_y = y - (drawn_h_in + header_gap_in) * inch
     c.line(x, bottom_line_y, page_w - x, bottom_line_y)
 
-    # --- Body starts below line ---
+    # Body start
     body_gap_in = 0.25
     body_top_y = bottom_line_y - (body_gap_in * inch)
 
@@ -168,7 +178,7 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
         if not spec_label:
             continue
         line = f"{bullet}  Spec Section {spec_label}"
-        for i_line, l in enumerate(textwrap.wrap(line, width=int(max_width / (12 * 0.5)))):
+        for i_line, l in enumerate(textwrap.wrap(line, width=int(max_width / (12 * 0.5)))):  # ~2 chars/pt
             c.drawString(x + (0 if i_line == 0 else 18), text_y, l)
             text_y -= 16
         text_y -= 2
@@ -200,47 +210,60 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
     return tmp.name
 
 def generate_section_cover(spec_section, product_name):
+    """
+    Returns a BytesIO containing a one-page section cover PDF.
+    """
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=LETTER)
     width, height = LETTER
     c.setFillColorRGB(1, 1, 1)
     c.rect(0, 0, width, height, fill=1)
     c.setFillColorRGB(0, 0, 0)
+
+    # Title + subtitle
     c.setFont(FONT_BOLD, 48)
     c.drawCentredString(width / 2, height / 2 + 40, (spec_section or "").strip())
     if product_name and product_name.strip():
         c.setFont(FONT_BOLD, 32)
         c.drawCentredString(width / 2, height / 2 - 40, product_name.strip())
+
+    # Footer
     footer_text = "Wiljo Interiors, Inc.   |   109 NE 38th Street, Oklahoma City, OK 73105"
     c.setFont(FONT_REG, 10)
     c.drawCentredString(width / 2, 0.5 * inch, footer_text)
+
     c.showPage()
     c.save()
     buf.seek(0)
     return buf
 
-# ---------- UI ----------
-st.title("Wiljo Submittal Builder")
+def sanitize_filename(name: str, fallback: str = "Submittal_Binder.pdf") -> str:
+    name = (name or "").strip()
+    if not name:
+        return fallback
+    # Remove path-ish chars and weirdness
+    name = re.sub(r'[<>:"/\\|?*]+', "_", name)
+    # Ensure .pdf extension
+    if not name.lower().endswith(".pdf"):
+        name += ".pdf"
+    return name
 
-# Binder info
-# =========================
-# UI — Steps 1 to 4 (drop-in)
-# =========================
-import datetime, tempfile
+# ---------- UI ----------
+st.title("📄 Wiljo Submittal Builder")
 
 # ---- Step 1: Binder Cover Information ----
 st.header("1) Binder Cover Information")
 col1, col2 = st.columns(2)
 with col1:
-    project = st.text_input("Project (for Re: line)", value="", placeholder="e.g., Project Name")
-    submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., PM Name")
-    # Calendar picker (replaces any old free-text date field)
+    project = st.text_input("Project (for Re: line)", value="", placeholder="e.g., Tuttle PS Phase 4")
+    submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., Frank Snolis")
+    # Calendar picker
     date_value = st.date_input("Date", value=datetime.date.today(), format="MM/DD/YYYY")
 with col2:
-    to_name = st.text_input("To: Name", value="", placeholder="e.g., CM/GC Contact")
-    to_company = st.text_input("To: Company", value="", placeholder="e.g., CM/GC")
-    to_addr1 = st.text_input("To: CM/GC Street Address", value="", placeholder="e.g., Street")
-    to_addr2 = st.text_input("To: City/State/Zip", value="", placeholder="e.g.,City, State, Zip")
+    to_name = st.text_input("To: Name", value="", placeholder="e.g., Colton Carson")
+    to_company = st.text_input("To: Company", value="", placeholder="e.g., Joe D. Hall Construction")
+    to_addr1 = st.text_input("To: Address Line 1", value="", placeholder="e.g., 105 Clyde Ave")
+    to_addr2 = st.text_input("To: Address Line 2", value="", placeholder="e.g., Elk City, OK 73644")
 
 # ---- Step 2: Upload PDFs ----
 st.header("2) Upload Product PDFs")
@@ -318,123 +341,96 @@ if required_missing:
 else:
     disabled = False
 
+# Custom file name input
+default_filename = "Submittal_Binder.pdf"
+suggested = project.strip() if project.strip() else "Submittal_Binder"
+try:
+    # Include date in suggestion
+    try:
+        date_str_tmp = date_value.strftime("%Y-%m-%d")
+    except Exception:
+        date_str_tmp = date_value.strftime("%m-%d-%Y")
+    suggested = f"{suggested}_{date_str_tmp}.pdf"
+except Exception:
+    suggested = f"{suggested}.pdf"
+
+custom_filename_input = st.text_input('File name (include ".pdf" or leave as is)', value=suggested)
+
 if st.button("📎 Generate Submittal Binder", disabled=disabled):
-    # Use the calendar-selected date
+    # Use the calendar-selected date for the cover
     try:
         date_str = date_value.strftime("%-m/%-d/%Y")   # Linux/Mac
     except Exception:
         date_str = date_value.strftime("%#m/%#d/%Y")   # Windows
 
-    merger = PdfMerger()
-        # --- Build the binder into memory safely ---
+    # Build the binder into memory safely
     from io import BytesIO
     output_buf = BytesIO()
     temp_paths = []  # track temp files so we can delete them
+    binder_cover_path = None
 
-    # Binder cover
-    binder_cover = generate_binder_cover(
-        date_str=date_str,
-        to_name=to_name,
-        to_company=to_company,
-        to_addr1=to_addr1,
-        to_addr2=to_addr2,
-        project=project,
-        submitter_name=submitter_name,
-    )
-    merger.append(binder_cover)
+    try:
+        with PdfMerger() as merger:
+            # Binder cover (returns a file path)
+            binder_cover_path = generate_binder_cover(
+                date_str=date_str,
+                to_name=to_name,
+                to_company=to_company,
+                to_addr1=to_addr1,
+                to_addr2=to_addr2,
+                project=project,
+                submitter_name=submitter_name,
+            )
+            merger.append(binder_cover_path)
 
-    # Section covers + PDFs
-    for entry in st.session_state.spec_data:
-        sec_cover = generate_section_cover(entry["spec"], entry["product"])
-        merger.append(sec_cover)
-        for p in entry.get("pdfs", []):
-            tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-            tmp_pdf.write(p["data"])
-            tmp_pdf.flush()
-            merger.append(tmp_pdf.name)
+            # Section covers + PDFs
+            for entry in st.session_state.spec_data:
+                # section cover is a BytesIO
+                sec_cover = generate_section_cover(entry["spec"], entry["product"])
+                try:
+                    sec_cover.seek(0)
+                except Exception:
+                    pass
+                merger.append(sec_cover)
 
-    # Write final PDF and offer download
-    final_output = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    merger.write(final_output.name)
-    merger.close()
+                # attached PDFs (ensure file is closed before append on Linux)
+                for p in entry.get("pdfs", []):
+                    tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+                    tmp_pdf.write(p["data"])
+                    tmp_pdf.flush()
+                    tmp_pdf.close()
+                    temp_paths.append(tmp_pdf.name)
+                    merger.append(tmp_pdf.name)
 
-    with open(final_output.name, "rb") as f:
+            # Write the merged doc to memory (single write, inside the context)
+            merger.write(output_buf)
+
+        # Prepare download
+        output_buf.seek(0)
+        final_name = sanitize_filename(custom_filename_input, fallback=default_filename)
         st.download_button(
             label="⬇️ Download Submittal Binder",
-            data=f.read(),
-            file_name="Submittal_Binder.pdf",
-            mime="application/pdf"
+            data=output_buf.getvalue(),
+            file_name=final_name,
+            mime="application/pdf",
         )
 
-    # Post-download messages
-    st.success("✅ Submittal Binder created.")
-    st.warning(
-        "REMINDER: Please highlight specific items used on the product data sheet. "
-        "(e.g., 5/8\" Fire code, or Tile number, etc.)"
-    )
-
-    # Binder cover
-    binder_cover = generate_binder_cover(
-        date_str=date_str,
-        to_name=to_name,
-        to_company=to_company,
-        to_addr1=to_addr1,
-        to_addr2=to_addr2,
-        project=project,
-        submitter_name=submitter_name,
-    )
-    merger.append(binder_cover)
-
-    # Section covers + PDFs
-    for entry in st.session_state.spec_data:
-        sec_cover = generate_section_cover(entry["spec"], entry["product"])
-        merger.append(sec_cover)
-        for p in entry.get("pdfs", []):
-            tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-            tmp_pdf.write(p["data"])
-            tmp_pdf.flush()
-            merger.append(tmp_pdf.name)
-
-    # Write final PDF and offer download
-    final_output = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    merger.write(final_output.name)
-    merger.close()
-
-    with open(final_output.name, "rb") as f:
-        st.download_button(
-            label="⬇️ Download Submittal Binder",
-            data=f.read(),
-            file_name="Submittal_Binder.pdf",
-            mime="application/pdf"
+        st.success("✅ Submittal Binder created.")
+        st.warning(
+            "REMINDER: Please highlight specific items used on the product data sheet. "
+            "(e.g., 5/8\" Fire code, or Tile number, etc.)"
         )
 
-    # Post-download messages
-    st.success("✅ Submittal Binder created.")
-    st.warning(
-        "REMINDER: Please highlight specific items used on the product data sheet. "
-        "(e.g., 5/8\" Fire code, or Tile number, etc.)"
-    )
+    finally:
+        # Cleanup temp files
+        for pth in temp_paths:
+            try:
+                os.remove(pth)
+            except Exception:
+                pass
+        if binder_cover_path:
+            try:
+                os.remove(binder_cover_path)
+            except Exception:
+                pass
 
-
-    # Sections
-    for entry in st.session_state.spec_data:
-        sec_cover = generate_section_cover(entry["spec"], entry["product"])
-        merger.append(sec_cover)
-        for p in entry.get("pdfs", []):
-            tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-            tmp_pdf.write(p["data"])
-            tmp_pdf.flush()
-            merger.append(tmp_pdf.name)
-
-    final_output = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    merger.write(final_output.name)
-    merger.close()
-
-    st.success("✅ Submittal Binder Created")
-
-    st.warning(
-    'REMINDER: Please highlight specific items used on the product data sheet. '
-    '(e.g., 5/8" Fire code, or Tile number, etc.)'
-)
-    with open(final_output.name, "rb") as f:
-        st.download_button("⬇️ Download Submittal Binder", data=f.read(), file_name="Submittal_Binder.pdf", mime="application/pdf")
