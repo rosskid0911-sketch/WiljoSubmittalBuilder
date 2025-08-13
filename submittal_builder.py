@@ -301,12 +301,10 @@ else:
 if st.button("📎 Generate Submittal Binder", disabled=disabled):
     # Date
     
-    else:
-        today = datetime.date.today()
-        try:
-            date_str = today.strftime("%-m/%-d/%Y")
-        except Exception:
-            date_str = today.strftime("%#m/%#d/%Y")
+    try:
+    date_str = date_value.strftime("%-m/%-d/%Y")   # Linux/Mac
+except Exception:
+    date_str = date_value.strftime("%#m/%#d/%Y")   # Windows
 
     merger = PdfMerger()
 
