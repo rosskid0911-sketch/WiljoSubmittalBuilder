@@ -249,21 +249,21 @@ def sanitize_filename(name: str, fallback: str = "Submittal_Binder.pdf") -> str:
     return name
 
 # ---------- UI ----------
-st.title("📄 Wiljo Submittal Builder")
+st.title("Wiljo Submittal Builder")
 
 # ---- Step 1: Binder Cover Information ----
 st.header("1) Binder Cover Information")
 col1, col2 = st.columns(2)
 with col1:
-    project = st.text_input("Project (for Re: line)", value="", placeholder="e.g., Tuttle PS Phase 4")
-    submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., Frank Snolis")
+    project = st.text_input("Project (for Re: line)", value="", placeholder="e.g., Project Name")
+    submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., PM Name")
     # Calendar picker
     date_value = st.date_input("Date", value=datetime.date.today(), format="MM/DD/YYYY")
 with col2:
-    to_name = st.text_input("To: Name", value="", placeholder="e.g., Colton Carson")
-    to_company = st.text_input("To: Company", value="", placeholder="e.g., Joe D. Hall Construction")
-    to_addr1 = st.text_input("To: Address Line 1", value="", placeholder="e.g., 105 Clyde Ave")
-    to_addr2 = st.text_input("To: Address Line 2", value="", placeholder="e.g., Elk City, OK 73644")
+    to_name = st.text_input("To: Name", value="", placeholder="e.g., CM/GC Contact")
+    to_company = st.text_input("To: Company", value="", placeholder="e.g., CM/GC")
+    to_addr1 = st.text_input("To: CM/GC Address", value="", placeholder="e.g., Street Address")
+    to_addr2 = st.text_input("To: City/State/Zip", value="", placeholder="e.g., City, State, Zip")
 
 # ---- Step 2: Upload PDFs ----
 st.header("2) Upload Product PDFs")
