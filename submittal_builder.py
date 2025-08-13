@@ -338,7 +338,7 @@ if st.button("📎 Generate Submittal Binder", disabled=disabled):
     merger.close()
 
     st.success("✅ Submittal Binder Created")
-    st.warning(
+
     st.warning(
     'REMINDER: Please highlight specific items used on the product data sheet. '
     '(e.g., 5/8" Fire code, or Tile number, etc.)'
