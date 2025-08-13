@@ -370,7 +370,6 @@ if st.button("📎 Generate Submittal Binder", disabled=disabled):
         "REMINDER: Please highlight specific items used on the product data sheet. "
         "(e.g., 5/8\" Fire code, or Tile number, etc.)"
     )
-)
 
     # Binder cover
     binder_cover = generate_binder_cover(
