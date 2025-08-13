@@ -338,5 +338,8 @@ if st.button("📎 Generate Submittal Binder", disabled=disabled):
     merger.close()
 
     st.success("✅ Submittal Binder Created")
+    st.warning(
+    "REMINDER: Please highlight specific items used on the product data sheet. "
+    '(e.g., 5/8" Fire code, or Tile number, etc.)'
     with open(final_output.name, "rb") as f:
         st.download_button("⬇️ Download Submittal Binder", data=f.read(), file_name="Submittal_Binder.pdf", mime="application/pdf")
