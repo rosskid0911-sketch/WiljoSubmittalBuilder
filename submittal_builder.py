@@ -225,10 +225,11 @@ st.title("Wiljo Submittal Builder")
 # Binder info
 st.header("1) Binder Cover Information")
 col1, col2 = st.columns(2)
+import datetime
 with col1:
-    project = st.text_input("Project (for Re: line)", value="", placeholder="e.g., Tuttle PS Phase 4")
-    submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., Frank Snolis")
-    date_text = st.text_input("Date", value="", placeholder="MM/DD/YYYY (leave blank to use today's date)")
+    project = st.text_input("Project (for Re:)", value="", placeholder="e.g., Project Name")
+    submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., PM Name")
+    date_text = st.date_input("Date", value=datetime.date.today(), format="MM/DD/YYYY")
 with col2:
     to_name = st.text_input("To: Name", value="", placeholder="e.g., Colton Carson")
     to_company = st.text_input("To: Company", value="", placeholder="e.g., Joe D. Hall Construction")
