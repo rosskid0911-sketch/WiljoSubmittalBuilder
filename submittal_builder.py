@@ -300,8 +300,7 @@ else:
 
 if st.button("📎 Generate Submittal Binder", disabled=disabled):
     # Date
-    if date_text.strip():
-        date_str = date_text.strip()
+    
     else:
         today = datetime.date.today()
         try:
