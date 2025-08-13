@@ -223,22 +223,36 @@ def generate_section_cover(spec_section, product_name):
 st.title("Wiljo Submittal Builder")
 
 # Binder info
+# =========================
+# UI — Steps 1 to 4 (drop-in)
+# =========================
+import datetime, tempfile
+
+st.title("📄 Wiljo Submittal Builder")
+
+# ---- Step 1: Binder Cover Information ----
 st.header("1) Binder Cover Information")
 col1, col2 = st.columns(2)
-import datetime
 with col1:
-    project = st.text_input("Project (for Re:)", value="", placeholder="e.g., Project Name")
-    submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., PM Name")
-    date_text = st.date_input("Date", value=datetime.date.today(), format="MM/DD/YYYY")
+    project = st.text_input("Project (for Re: line)", value="", placeholder="e.g., Tuttle PS Phase 4")
+    submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., Frank Snolis")
+    # Calendar picker (replaces any old free-text date field)
+    date_value = st.date_input("Date", value=datetime.date.today(), format="MM/DD/YYYY")
 with col2:
-    to_name = st.text_input("To: Name", value="", placeholder="e.g., Project PM or PE")
-    to_company = st.text_input("To: Company", value="", placeholder="e.g., General Contractor or CM")
-    to_addr1 = st.text_input("To: Street", value="", placeholder="e.g., GC or CM Address Street")
-    to_addr2 = st.text_input("To: City/State/Zip", value="", placeholder="e.g., City, State, Zip")
+    to_name = st.text_input("To: Name", value="", placeholder="e.g., Colton Carson")
+    to_company = st.text_input("To: Company", value="", placeholder="e.g., Joe D. Hall Construction")
+    to_addr1 = st.text_input("To: Address Line 1", value="", placeholder="e.g., 105 Clyde Ave")
+    to_addr2 = st.text_input("To: Address Line 2", value="", placeholder="e.g., Elk City, OK 73644")
 
+# ---- Step 2: Upload PDFs ----
 st.header("2) Upload Product PDFs")
-uploaded_pdfs = st.file_uploader("Upload one or more product submittal PDFs", type=["pdf"], accept_multiple_files=True)
+uploaded_pdfs = st.file_uploader(
+    "Upload one or more product submittal PDFs",
+    type=["pdf"],
+    accept_multiple_files=True
+)
 
+# ---- Step 3: Add Spec Sections & Products ----
 st.header("3) Add Spec Sections & Products")
 if "spec_data" not in st.session_state:
     st.session_state.spec_data = []
@@ -248,24 +262,32 @@ if "confirm_clear" not in st.session_state:
 with st.form("spec_form", clear_on_submit=True):
     spec = st.text_input("Spec Section (e.g., 054000 Cold Formed Metal Framing)")
     product = st.text_input("Product Name (for the section cover page)")
-    pdf_files = st.multiselect("Select attached PDFs for this section", uploaded_pdfs, format_func=lambda f: getattr(f, "name", "PDF"))
+    pdf_files = st.multiselect(
+        "Select attached PDFs for this section",
+        uploaded_pdfs,
+        format_func=lambda f: getattr(f, "name", "PDF")
+    )
     add_section = st.form_submit_button("Add Section")
     if add_section:
         pdf_payloads = [{"name": f.name, "data": f.getvalue()} for f in pdf_files]
-        st.session_state.spec_data.append({"spec": (spec or "").strip(), "product": (product or "").strip(), "pdfs": pdf_payloads})
+        st.session_state.spec_data.append({
+            "spec": (spec or "").strip(),
+            "product": (product or "").strip(),
+            "pdfs": pdf_payloads
+        })
 
+# Show current list and Clear All (with confirm)
 if st.session_state.spec_data:
     st.subheader("Sections Added (in order)")
 
-    # Clear all with confirm
     if st.session_state.confirm_clear:
-        col_confirm = st.columns([1, 1])
-        with col_confirm[0]:
+        c1, c2 = st.columns(2)
+        with c1:
             if st.button("✅ Yes, Clear All"):
                 st.session_state.spec_data.clear()
                 st.session_state.confirm_clear = False
                 st.rerun()
-        with col_confirm[1]:
+        with c2:
             if st.button("❌ Cancel"):
                 st.session_state.confirm_clear = False
                 st.rerun()
@@ -274,7 +296,6 @@ if st.session_state.spec_data:
             st.session_state.confirm_clear = True
             st.rerun()
 
-    # Display current list
     for i, entry in enumerate(st.session_state.spec_data, start=1):
         with st.expander(f"{i}. Spec Section: {entry['spec']} — {entry['product']}  ({len(entry.get('pdfs', []))} file(s))", expanded=True):
             if entry.get("pdfs"):
@@ -283,6 +304,7 @@ if st.session_state.spec_data:
             else:
                 st.caption("No PDFs attached.")
 
+# ---- Step 4: Generate Submittal Binder ----
 st.header("4) Generate Submittal Binder")
 required_missing = []
 if not (st.session_state.get("spec_data")):
@@ -299,13 +321,56 @@ else:
     disabled = False
 
 if st.button("📎 Generate Submittal Binder", disabled=disabled):
-    # Date from calendar (date_value must be defined earlier via st.date_input)
+    # Use the calendar-selected date
     try:
         date_str = date_value.strftime("%-m/%-d/%Y")   # Linux/Mac
     except Exception:
         date_str = date_value.strftime("%#m/%#d/%Y")   # Windows
 
     merger = PdfMerger()
+
+    # Binder cover
+    binder_cover = generate_binder_cover(
+        date_str=date_str,
+        to_name=to_name,
+        to_company=to_company,
+        to_addr1=to_addr1,
+        to_addr2=to_addr2,
+        project=project,
+        submitter_name=submitter_name,
+    )
+    merger.append(binder_cover)
+
+    # Section covers + PDFs
+    for entry in st.session_state.spec_data:
+        sec_cover = generate_section_cover(entry["spec"], entry["product"])
+        merger.append(sec_cover)
+        for p in entry.get("pdfs", []):
+            tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            tmp_pdf.write(p["data"])
+            tmp_pdf.flush()
+            merger.append(tmp_pdf.name)
+
+    # Write final PDF and offer download
+    final_output = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    merger.write(final_output.name)
+    merger.close()
+
+    with open(final_output.name, "rb") as f:
+        st.download_button(
+            label="⬇️ Download Submittal Binder",
+            data=f.read(),
+            file_name="Submittal_Binder.pdf",
+            mime="application/pdf"
+        )
+
+    # Post-download messages
+    st.success("✅ Submittal Binder created.")
+    st.warning(
+        "REMINDER: Please highlight specific items used on the product data sheet. "
+        "(e.g., 5/8\" Fire code, or Tile number, etc.)"
+    )
+)
 
     # Binder cover
     binder_cover = generate_binder_cover(
