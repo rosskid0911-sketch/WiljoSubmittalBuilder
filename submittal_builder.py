@@ -228,7 +228,7 @@ st.title("Wiljo Submittal Builder")
 # =========================
 import datetime, tempfile
 
-st.title("📄 Wiljo Submittal Builder")
+st.title("Wiljo Submittal Builder")
 
 # ---- Step 1: Binder Cover Information ----
 st.header("1) Binder Cover Information")
