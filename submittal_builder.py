@@ -231,10 +231,10 @@ with col1:
     submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., PM Name")
     date_text = st.date_input("Date", value=datetime.date.today(), format="MM/DD/YYYY")
 with col2:
-    to_name = st.text_input("To: Name", value="", placeholder="e.g., Colton Carson")
-    to_company = st.text_input("To: Company", value="", placeholder="e.g., Joe D. Hall Construction")
-    to_addr1 = st.text_input("To: Address Line 1", value="", placeholder="e.g., 105 Clyde Ave")
-    to_addr2 = st.text_input("To: Address Line 2", value="", placeholder="e.g., Elk City, OK 73644")
+    to_name = st.text_input("To: Name", value="", placeholder="e.g., Project PM or PE")
+    to_company = st.text_input("To: Company", value="", placeholder="e.g., General Contractor or CM")
+    to_addr1 = st.text_input("To: Street", value="", placeholder="e.g., GC or CM Address Street")
+    to_addr2 = st.text_input("To: City/State/Zip", value="", placeholder="e.g., City, State, Zip")
 
 st.header("2) Upload Product PDFs")
 uploaded_pdfs = st.file_uploader("Upload one or more product submittal PDFs", type=["pdf"], accept_multiple_files=True)
