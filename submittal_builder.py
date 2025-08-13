@@ -326,6 +326,10 @@ if st.button("📎 Generate Submittal Binder", disabled=disabled):
         date_str = date_value.strftime("%#m/%#d/%Y")   # Windows
 
     merger = PdfMerger()
+        # --- Build the binder into memory safely ---
+    from io import BytesIO
+    output_buf = BytesIO()
+    temp_paths = []  # track temp files so we can delete them
 
     # Binder cover
     binder_cover = generate_binder_cover(
