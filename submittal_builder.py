@@ -299,12 +299,11 @@ else:
     disabled = False
 
 if st.button("📎 Generate Submittal Binder", disabled=disabled):
-    # Date
-    
+    # Date from calendar (date_value must be defined earlier via st.date_input)
     try:
-    date_str = date_value.strftime("%-m/%-d/%Y")   # Linux/Mac
-except Exception:
-    date_str = date_value.strftime("%#m/%#d/%Y")   # Windows
+        date_str = date_value.strftime("%-m/%-d/%Y")   # Linux/Mac
+    except Exception:
+        date_str = date_value.strftime("%#m/%#d/%Y")   # Windows
 
     merger = PdfMerger()
 
@@ -319,6 +318,37 @@ except Exception:
         submitter_name=submitter_name,
     )
     merger.append(binder_cover)
+
+    # Section covers + PDFs
+    for entry in st.session_state.spec_data:
+        sec_cover = generate_section_cover(entry["spec"], entry["product"])
+        merger.append(sec_cover)
+        for p in entry.get("pdfs", []):
+            tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            tmp_pdf.write(p["data"])
+            tmp_pdf.flush()
+            merger.append(tmp_pdf.name)
+
+    # Write final PDF and offer download
+    final_output = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    merger.write(final_output.name)
+    merger.close()
+
+    with open(final_output.name, "rb") as f:
+        st.download_button(
+            label="⬇️ Download Submittal Binder",
+            data=f.read(),
+            file_name="Submittal_Binder.pdf",
+            mime="application/pdf"
+        )
+
+    # Post-download messages
+    st.success("✅ Submittal Binder created.")
+    st.warning(
+        "REMINDER: Please highlight specific items used on the product data sheet. "
+        "(e.g., 5/8\" Fire code, or Tile number, etc.)"
+    )
+
 
     # Sections
     for entry in st.session_state.spec_data:
