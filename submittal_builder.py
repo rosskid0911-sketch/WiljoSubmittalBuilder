@@ -347,7 +347,7 @@ with col1:
 with col2:
     to_name = st.text_input("To: Name", value="", placeholder="e.g., CM/GC Contact")
     to_company = st.text_input("To: Company", value="", placeholder="e.g., CM/GC")
-    to_addr1 = st.text_input("To: CM/GC Street", value="", placeholder="e.g., 105 Clyde Ave")
+    to_addr1 = st.text_input("To: CM/GC Street", value="", placeholder="e.g., Street")
     to_addr2 = st.text_input("To: CITY/STATE/ZIP", value="", placeholder="e.g., City, State, Zip")
 
 # ---- Step 2: Upload PDFs ----
