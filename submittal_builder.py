@@ -211,7 +211,7 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
     c.save()
     return tmp.name
     def wrap_centered_text(c, text, center_x, top_y, max_width, font, size, leading):
-    """
+    ""
     Wraps text to fit max_width (approx), draws each line centered,
     returns the y after drawing plus the list of lines.
     """
@@ -327,6 +327,7 @@ def generate_section_cover(spec_section, product_name):
     c.save()
     buf.seek(0)
     return buf
+
 
 
 def sanitize_filename(name: str, fallback: str = "Submittal_Binder.pdf") -> str:
