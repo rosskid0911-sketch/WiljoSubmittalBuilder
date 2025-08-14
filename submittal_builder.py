@@ -1,4 +1,5 @@
 # submittal_builder.py — Streamlit Cloud–ready
+
 import streamlit as st
 from PyPDF2 import PdfMerger
 from reportlab.lib.pagesizes import LETTER
@@ -7,26 +8,24 @@ from reportlab.lib.utils import ImageReader
 from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.pdfmetrics import stringWidth
 import textwrap
 import tempfile
 import io
 import os
-import sys
 import re
 import datetime
-from reportlab.pdfbase.pdfmetrics import stringWidth
-
 
 # ---------- Page config ----------
 st.set_page_config(page_title="Wiljo Submittal Builder", layout="centered")
 
 # ---------- Helpers ----------
 def resource_path(*parts):
-    # Repo-relative path (works on Cloud and local)
+    """Repo-relative path (works on Streamlit Cloud and locally)."""
     base = os.path.dirname(__file__)
     return os.path.join(base, *parts)
 
-# Fonts (optional). If fonts not present, fall back to Times.
+# Optional custom fonts; fall back to Times if not present
 FONT_REG = "Times-Roman"
 FONT_BOLD = "Times-Bold"
 try:
@@ -39,14 +38,8 @@ except Exception:
 
 LETTER_W, LETTER_H = LETTER
 
-try:
-    from PIL import Image
-    PIL_OK = True
-except Exception:
-    PIL_OK = False
-
 def load_logo_imagereader(filename="wiljo_logo.png"):
-    """Robustly load a bundled logo as ImageReader."""
+    """Load a bundled logo as ImageReader (repo root)."""
     p = resource_path(filename)
     if os.path.exists(p):
         try:
@@ -60,15 +53,10 @@ def load_logo_imagereader(filename="wiljo_logo.png"):
             pass
     return None
 
-def draw_wrapped_text(c, text, x, y, max_width, font=FONT_REG, size=12, leading=16):
-    c.setFont(font, size)
-    chars = max(1, int(max_width / (size * 0.5)))
-    for line in textwrap.wrap(text, width=chars):
-        c.drawString(x, y, line)
-        y -= leading
-    return y
-
 def draw_logo_fit_box(c, logo_filename, left_x, top_y, max_width_in=1.6, max_height_in=0.75):
+    """
+    Draw the logo scaled to fit inside a box (inches). Returns drawn height in inches.
+    """
     ir = load_logo_imagereader(logo_filename)
     if ir is None:
         try:
@@ -94,7 +82,7 @@ def draw_logo_fit_box(c, logo_filename, left_x, top_y, max_width_in=1.6, max_hei
     c.drawImage(
         ir,
         left_x,
-        top_y - draw_h,   # y is bottom-left in ReportLab
+        top_y - draw_h,  # ReportLab y is bottom-left
         width=draw_w,
         height=draw_h,
         preserveAspectRatio=True,
@@ -102,6 +90,66 @@ def draw_logo_fit_box(c, logo_filename, left_x, top_y, max_width_in=1.6, max_hei
     )
     return draw_h / inch
 
+def draw_wrapped_text(c, text, x, y, max_width, font=FONT_REG, size=12, leading=16):
+    """Left-aligned wrapped text."""
+    c.setFont(font, size)
+    chars = max(1, int(max_width / (size * 0.5)))
+    for line in textwrap.wrap(text or "", width=chars):
+        c.drawString(x, y, line)
+        y -= leading
+    return y
+
+# ---- centered wrap + auto-fit for section covers ----
+def wrap_centered_text(c, text, center_x, top_y, max_width, font, size, leading):
+    """
+    Wrap text to fit max_width (approx), draw each line centered,
+    and return the y after drawing along with the list of lines.
+    """
+    s = (text or "").strip()
+    c.setFont(font, size)
+    chars = max(1, int(max_width / (size * 0.5)))
+    lines = textwrap.wrap(s, width=chars) if s else [""]
+    y = top_y
+    for line in lines:
+        c.drawCentredString(center_x, y, line)
+        y -= leading
+    return y, lines
+
+def draw_autofit_centered(
+    c, text, center_x, box_top_y, box_height, max_width,
+    font, max_size=48, min_size=14, target_lines=2, line_gap=6
+):
+    """
+    Auto-shrinks text to fit within (max_width x box_height), centered.
+    Tries from max_size down to min_size until it fits target_lines (or fewer),
+    horizontal width, and vertical space. Draws and returns the final y.
+    """
+    s = (text or "").strip()
+    if not s:
+        return box_top_y
+
+    for size in range(int(max_size), int(min_size) - 1, -1):
+        leading = size + line_gap
+        chars = max(1, int(max_width / (size * 0.5)))
+        lines = textwrap.wrap(s, width=chars) or [""]
+        needed_h = len(lines) * leading
+        too_wide = any(stringWidth(line, font, size) > max_width for line in lines)
+
+        if (len(lines) <= target_lines) and (needed_h <= box_height) and not too_wide:
+            y = box_top_y - (box_height - leading) / 2
+            c.setFont(font, size)
+            for line in lines:
+                c.drawCentredString(center_x, y, line)
+                y -= leading
+            return y
+
+    # Fallback at min_size
+    size = min_size
+    leading = size + line_gap
+    _, _ = wrap_centered_text(c, s, center_x, box_top_y - leading / 2, max_width, font, size, leading)
+    return box_top_y - leading
+
+# ---------- PDF Generators ----------
 def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, project, submitter_name):
     """
     Letter-style binder cover with logo between two full-width lines, then body.
@@ -114,7 +162,7 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
     y = LETTER_H - margin
     page_w, _ = LETTER
 
-    # Top break line (above logo)
+    # Top break line (slightly above logo)
     c.setStrokeColorRGB(0, 0, 0)
     c.setLineWidth(1)
     top_line_y = y + 0.20 * inch
@@ -180,7 +228,7 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
         if not spec_label:
             continue
         line = f"{bullet}  Spec Section {spec_label}"
-        for i_line, l in enumerate(textwrap.wrap(line, width=int(max_width / (12 * 0.5)))):  # ~2 chars/pt
+        for i_line, l in enumerate(textwrap.wrap(line, width=int(max_width / (12 * 0.5)))):
             c.drawString(x + (0 if i_line == 0 else 18), text_y, l)
             text_y -= 16
         text_y -= 2
@@ -210,117 +258,7 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
     c.showPage()
     c.save()
     return tmp.name
-    def wrap_centered_text(c, text, center_x, top_y, max_width, font, size, leading):
-    ""
-    Wraps text to fit max_width (approx), draws each line centered,
-    returns the y after drawing plus the list of lines.
-    """
-    text = (text or "").strip()
-    c.setFont(font, size)
-    # rough chars-per-line estimate (~0.5 * size per char)
-    chars = max(1, int(max_width / (size * 0.5)))
-    lines = textwrap.wrap(text, width=chars) if text else [""]
-    y = top_y
-    for line in lines:
-        c.drawCentredString(center_x, y, line)
-        y -= leading
-    return y, lines
 
-def draw_autofit_centered(
-    c, text, center_x, box_top_y, box_height, max_width,
-    font, max_size=48, min_size=14, target_lines=2, line_gap=6
-):
-    """
-    Auto-shrinks text to fit within (max_width x box_height), centered.
-    Tries from max_size down to min_size until it fits target_lines (or fewer)
-    and vertical space. Draws the text and returns the y after drawing.
-    """
-    text = (text or "").strip()
-    if not text:
-        return box_top_y
-
-    for size in range(int(max_size), int(min_size) - 1, -1):
-        leading = size + line_gap
-        # estimate wrap
-        chars = max(1, int(max_width / (size * 0.5)))
-        lines = textwrap.wrap(text, width=chars) or [""]
-        needed_h = len(lines) * leading
-        too_wide = any(stringWidth(line, font, size) > max_width for line in lines)
-
-        if (len(lines) <= target_lines) and (needed_h <= box_height) and not too_wide:
-            # vertically center block inside the box
-            y_start = box_top_y - (box_height - leading) / 2
-            c.setFont(font, size)
-            y = y_start
-            for line in lines:
-                c.drawCentredString(center_x, y, line)
-                y -= leading
-            return y
-
-    # Fallback at min_size
-    size = min_size
-    leading = size + line_gap
-    _, _ = wrap_centered_text(c, text, center_x, box_top_y - leading / 2, max_width, font, size, leading)
-    return box_top_y - leading
-
-# --- required for width measuring (place near your other imports if not present) ---
-from reportlab.pdfbase.pdfmetrics import stringWidth
-
-# --------- helpers for centered wrapping/auto-fit (place above generate_section_cover) ---------
-def wrap_centered_text(c, text, center_x, top_y, max_width, font, size, leading):
-    """
-    Wrap text to fit max_width (approx by char count), draw each line centered,
-    and return the y position after drawing along with the list of lines.
-    """
-    text = (text or "").strip()
-    c.setFont(font, size)
-    # rough chars-per-line estimate (~0.5 * size per char)
-    chars = max(1, int(max_width / (size * 0.5)))
-    lines = textwrap.wrap(text, width=chars) if text else [""]
-    y = top_y
-    for line in lines:
-        c.drawCentredString(center_x, y, line)
-        y -= leading
-    return y, lines
-
-def draw_autofit_centered(
-    c, text, center_x, box_top_y, box_height, max_width,
-    font, max_size=48, min_size=14, target_lines=2, line_gap=6
-):
-    """
-    Auto-shrinks text to fit within (max_width x box_height), centered.
-    Tries from max_size down to min_size until it fits target_lines (or fewer),
-    horizontal width, and vertical space. Draws the text and returns the final y.
-    """
-    text = (text or "").strip()
-    if not text:
-        return box_top_y
-
-    for size in range(int(max_size), int(min_size) - 1, -1):
-        leading = size + line_gap
-        # estimate wrapping for this font size
-        chars = max(1, int(max_width / (size * 0.5)))
-        lines = textwrap.wrap(text, width=chars) or [""]
-        needed_h = len(lines) * leading
-        # check precise widths as well
-        too_wide = any(stringWidth(line, font, size) > max_width for line in lines)
-
-        if (len(lines) <= target_lines) and (needed_h <= box_height) and not too_wide:
-            # roughly vertically center block in the box
-            y = box_top_y - (box_height - leading) / 2
-            c.setFont(font, size)
-            for line in lines:
-                c.drawCentredString(center_x, y, line)
-                y -= leading
-            return y
-
-    # Fallback at min_size if nothing fit
-    size = min_size
-    leading = size + line_gap
-    _, _ = wrap_centered_text(c, text, center_x, box_top_y - leading / 2, max_width, font, size, leading)
-    return box_top_y - leading
-
-# ---------------- wrapped/auto-fit section cover ----------------
 def generate_section_cover(spec_section, product_name):
     """
     Returns a BytesIO containing a one-page section cover PDF.
@@ -342,7 +280,7 @@ def generate_section_cover(spec_section, product_name):
     center_x = page_w / 2
     max_width = page_w - 2 * margin_x
 
-    # Spec Section title box (above center a bit)
+    # Spec Section title (above center)
     title_box_top = page_h * 0.62
     title_box_h   = 1.8 * inch
     draw_autofit_centered(
@@ -359,7 +297,7 @@ def generate_section_cover(spec_section, product_name):
         line_gap=6,
     )
 
-    # Product name box below
+    # Product name below
     product_box_top = title_box_top - title_box_h - 0.25 * inch
     product_box_h   = 1.2 * inch
     draw_autofit_centered(
@@ -386,16 +324,12 @@ def generate_section_cover(spec_section, product_name):
     buf.seek(0)
     return buf
 
-
-
-
 def sanitize_filename(name: str, fallback: str = "Submittal_Binder.pdf") -> str:
+    """Remove illegal filename chars and ensure .pdf extension."""
     name = (name or "").strip()
     if not name:
         return fallback
-    # Remove path-ish chars and weirdness
     name = re.sub(r'[<>:"/\\|?*]+', "_", name)
-    # Ensure .pdf extension
     if not name.lower().endswith(".pdf"):
         name += ".pdf"
     return name
@@ -408,14 +342,13 @@ st.header("1) Binder Cover Information")
 col1, col2 = st.columns(2)
 with col1:
     project = st.text_input("Project (for Re: line)", value="", placeholder="e.g., Project Name")
-    submitter_name = st.text_input("Submitted By (signature name)", value="", placeholder="e.g., PM Name")
-    # Calendar picker
+    submitter_name = st.text_input("Submitted By (PM Name)", value="", placeholder="e.g., PM Name")
     date_value = st.date_input("Date", value=datetime.date.today(), format="MM/DD/YYYY")
 with col2:
     to_name = st.text_input("To: Name", value="", placeholder="e.g., CM/GC Contact")
     to_company = st.text_input("To: Company", value="", placeholder="e.g., CM/GC")
-    to_addr1 = st.text_input("To: CM/GC Address", value="", placeholder="e.g., Street Address")
-    to_addr2 = st.text_input("To: City/State/Zip", value="", placeholder="e.g., City, State, Zip")
+    to_addr1 = st.text_input("To: CM/GC Street", value="", placeholder="e.g., 105 Clyde Ave")
+    to_addr2 = st.text_input("To: CITY/STATE/ZIP", value="", placeholder="e.g., City, State, Zip")
 
 # ---- Step 2: Upload PDFs ----
 st.header("2) Upload Product PDFs")
@@ -493,37 +426,35 @@ if required_missing:
 else:
     disabled = False
 
-# Custom file name input
+# Custom file name (suggest Project + date)
 default_filename = "Submittal_Binder.pdf"
-suggested = project.strip() if project.strip() else "Submittal_Binder"
+suggested_name = (project.strip() or "Submittal_Binder")
 try:
-    # Include date in suggestion
     try:
-        date_str_tmp = date_value.strftime("%Y-%m-%d")
+        date_tag = date_value.strftime("%Y-%m-%d")
     except Exception:
-        date_str_tmp = date_value.strftime("%m-%d-%Y")
-    suggested = f"{suggested}_{date_str_tmp}.pdf"
+        date_tag = date_value.strftime("%m-%d-%Y")
+    suggested_name = f"{suggested_name}_{date_tag}.pdf"
 except Exception:
-    suggested = f"{suggested}.pdf"
+    suggested_name = f"{suggested_name}.pdf"
 
-custom_filename_input = st.text_input('File name (include ".pdf" or leave as is)', value=suggested)
+custom_filename_input = st.text_input('File name (include ".pdf" or leave as suggested)', value=suggested_name)
 
 if st.button("📎 Generate Submittal Binder", disabled=disabled):
-    # Use the calendar-selected date for the cover
+    # Use the calendar-selected date (cover wants M/D/YYYY, cross-platform)
     try:
-        date_str = date_value.strftime("%-m/%-d/%Y")   # Linux/Mac
+        date_str = date_value.strftime("%-m/%-d/%Y")  # POSIX
     except Exception:
-        date_str = date_value.strftime("%#m/%#d/%Y")   # Windows
+        date_str = date_value.strftime("%#m/%#d/%Y")  # Windows
 
-    # Build the binder into memory safely
     from io import BytesIO
     output_buf = BytesIO()
-    temp_paths = []  # track temp files so we can delete them
+    temp_paths = []
     binder_cover_path = None
 
     try:
         with PdfMerger() as merger:
-            # Binder cover (returns a file path)
+            # Binder cover
             binder_cover_path = generate_binder_cover(
                 date_str=date_str,
                 to_name=to_name,
@@ -537,7 +468,6 @@ if st.button("📎 Generate Submittal Binder", disabled=disabled):
 
             # Section covers + PDFs
             for entry in st.session_state.spec_data:
-                # section cover is a BytesIO
                 sec_cover = generate_section_cover(entry["spec"], entry["product"])
                 try:
                     sec_cover.seek(0)
@@ -545,7 +475,6 @@ if st.button("📎 Generate Submittal Binder", disabled=disabled):
                     pass
                 merger.append(sec_cover)
 
-                # attached PDFs (ensure file is closed before append on Linux)
                 for p in entry.get("pdfs", []):
                     tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
                     tmp_pdf.write(p["data"])
@@ -554,10 +483,9 @@ if st.button("📎 Generate Submittal Binder", disabled=disabled):
                     temp_paths.append(tmp_pdf.name)
                     merger.append(tmp_pdf.name)
 
-            # Write the merged doc to memory (single write, inside the context)
             merger.write(output_buf)
 
-        # Prepare download
+        # Download
         output_buf.seek(0)
         final_name = sanitize_filename(custom_filename_input, fallback=default_filename)
         st.download_button(
@@ -585,4 +513,3 @@ if st.button("📎 Generate Submittal Binder", disabled=disabled):
                 os.remove(binder_cover_path)
             except Exception:
                 pass
-
