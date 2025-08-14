@@ -14,6 +14,8 @@ import os
 import sys
 import re
 import datetime
+from reportlab.pdfbase.pdfmetrics import stringWidth
+
 
 # ---------- Page config ----------
 st.set_page_config(page_title="Wiljo Submittal Builder", layout="centered")
@@ -208,12 +210,64 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
     c.showPage()
     c.save()
     return tmp.name
+    def wrap_centered_text(c, text, center_x, top_y, max_width, font, size, leading):
+    """
+    Wraps text to fit max_width (approx), draws each line centered,
+    returns the y after drawing plus the list of lines.
+    """
+    text = (text or "").strip()
+    c.setFont(font, size)
+    # rough chars-per-line estimate (~0.5 * size per char)
+    chars = max(1, int(max_width / (size * 0.5)))
+    lines = textwrap.wrap(text, width=chars) if text else [""]
+    y = top_y
+    for line in lines:
+        c.drawCentredString(center_x, y, line)
+        y -= leading
+    return y, lines
+
+def draw_autofit_centered(
+    c, text, center_x, box_top_y, box_height, max_width,
+    font, max_size=48, min_size=14, target_lines=2, line_gap=6
+):
+    """
+    Auto-shrinks text to fit within (max_width x box_height), centered.
+    Tries from max_size down to min_size until it fits target_lines (or fewer)
+    and vertical space. Draws the text and returns the y after drawing.
+    """
+    text = (text or "").strip()
+    if not text:
+        return box_top_y
+
+    for size in range(int(max_size), int(min_size) - 1, -1):
+        leading = size + line_gap
+        # estimate wrap
+        chars = max(1, int(max_width / (size * 0.5)))
+        lines = textwrap.wrap(text, width=chars) or [""]
+        needed_h = len(lines) * leading
+        too_wide = any(stringWidth(line, font, size) > max_width for line in lines)
+
+        if (len(lines) <= target_lines) and (needed_h <= box_height) and not too_wide:
+            # vertically center block inside the box
+            y_start = box_top_y - (box_height - leading) / 2
+            c.setFont(font, size)
+            y = y_start
+            for line in lines:
+                c.drawCentredString(center_x, y, line)
+                y -= leading
+            return y
+
+    # Fallback at min_size
+    size = min_size
+    leading = size + line_gap
+    _, _ = wrap_centered_text(c, text, center_x, box_top_y - leading / 2, max_width, font, size, leading)
+    return box_top_y - leading
 
 def generate_section_cover(spec_section, product_name):
     """
     Returns a BytesIO containing a one-page section cover PDF.
     - Spec Section (bold, large) auto-wraps/auto-shrinks to fit 2 lines.
-    - Product Name (bold, medium) wraps below it.
+    - Product Name (bold, medium) wraps below it (up to 3 lines).
     - Footer centered at bottom.
     """
     buf = io.BytesIO()
@@ -225,17 +279,15 @@ def generate_section_cover(spec_section, product_name):
     c.rect(0, 0, page_w, page_h, fill=1)
     c.setFillColorRGB(0, 0, 0)
 
-    # Layout constants
+    # Layout
     margin_x = 0.85 * inch
     center_x = page_w / 2
+    max_width = page_w - 2 * margin_x
 
-    # Reserve a tall box for the Spec Section title
-    title_box_top = page_h * 0.62     # a little above center
+    # Title box (spec section)
+    title_box_top = page_h * 0.62
     title_box_h   = 1.8 * inch
-    max_width     = page_w - 2 * margin_x
-
-    # Draw Spec Section (auto-fit, bold)
-    _ = draw_autofit_centered(
+    draw_autofit_centered(
         c,
         text=spec_section,
         center_x=center_x,
@@ -249,7 +301,7 @@ def generate_section_cover(spec_section, product_name):
         line_gap=6,
     )
 
-    # Product name below, slightly smaller; allow up to 3 lines
+    # Product box below
     product_box_top = title_box_top - title_box_h - 0.25 * inch
     product_box_h   = 1.2 * inch
     draw_autofit_centered(
