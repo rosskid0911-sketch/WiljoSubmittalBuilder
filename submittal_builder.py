@@ -263,6 +263,64 @@ def draw_autofit_centered(
     _, _ = wrap_centered_text(c, text, center_x, box_top_y - leading / 2, max_width, font, size, leading)
     return box_top_y - leading
 
+# --- required for width measuring (place near your other imports if not present) ---
+from reportlab.pdfbase.pdfmetrics import stringWidth
+
+# --------- helpers for centered wrapping/auto-fit (place above generate_section_cover) ---------
+def wrap_centered_text(c, text, center_x, top_y, max_width, font, size, leading):
+    """
+    Wrap text to fit max_width (approx by char count), draw each line centered,
+    and return the y position after drawing along with the list of lines.
+    """
+    text = (text or "").strip()
+    c.setFont(font, size)
+    # rough chars-per-line estimate (~0.5 * size per char)
+    chars = max(1, int(max_width / (size * 0.5)))
+    lines = textwrap.wrap(text, width=chars) if text else [""]
+    y = top_y
+    for line in lines:
+        c.drawCentredString(center_x, y, line)
+        y -= leading
+    return y, lines
+
+def draw_autofit_centered(
+    c, text, center_x, box_top_y, box_height, max_width,
+    font, max_size=48, min_size=14, target_lines=2, line_gap=6
+):
+    """
+    Auto-shrinks text to fit within (max_width x box_height), centered.
+    Tries from max_size down to min_size until it fits target_lines (or fewer),
+    horizontal width, and vertical space. Draws the text and returns the final y.
+    """
+    text = (text or "").strip()
+    if not text:
+        return box_top_y
+
+    for size in range(int(max_size), int(min_size) - 1, -1):
+        leading = size + line_gap
+        # estimate wrapping for this font size
+        chars = max(1, int(max_width / (size * 0.5)))
+        lines = textwrap.wrap(text, width=chars) or [""]
+        needed_h = len(lines) * leading
+        # check precise widths as well
+        too_wide = any(stringWidth(line, font, size) > max_width for line in lines)
+
+        if (len(lines) <= target_lines) and (needed_h <= box_height) and not too_wide:
+            # roughly vertically center block in the box
+            y = box_top_y - (box_height - leading) / 2
+            c.setFont(font, size)
+            for line in lines:
+                c.drawCentredString(center_x, y, line)
+                y -= leading
+            return y
+
+    # Fallback at min_size if nothing fit
+    size = min_size
+    leading = size + line_gap
+    _, _ = wrap_centered_text(c, text, center_x, box_top_y - leading / 2, max_width, font, size, leading)
+    return box_top_y - leading
+
+# ---------------- wrapped/auto-fit section cover ----------------
 def generate_section_cover(spec_section, product_name):
     """
     Returns a BytesIO containing a one-page section cover PDF.
@@ -284,7 +342,7 @@ def generate_section_cover(spec_section, product_name):
     center_x = page_w / 2
     max_width = page_w - 2 * margin_x
 
-    # Title box (spec section)
+    # Spec Section title box (above center a bit)
     title_box_top = page_h * 0.62
     title_box_h   = 1.8 * inch
     draw_autofit_centered(
@@ -301,7 +359,7 @@ def generate_section_cover(spec_section, product_name):
         line_gap=6,
     )
 
-    # Product box below
+    # Product name box below
     product_box_top = title_box_top - title_box_h - 0.25 * inch
     product_box_h   = 1.2 * inch
     draw_autofit_centered(
@@ -327,6 +385,7 @@ def generate_section_cover(spec_section, product_name):
     c.save()
     buf.seek(0)
     return buf
+
 
 
 
