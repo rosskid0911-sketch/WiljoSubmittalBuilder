@@ -328,6 +328,7 @@ def generate_section_cover(spec_section, product_name):
     buf.seek(0)
     return buf
 
+
 def sanitize_filename(name: str, fallback: str = "Submittal_Binder.pdf") -> str:
     name = (name or "").strip()
     if not name:
