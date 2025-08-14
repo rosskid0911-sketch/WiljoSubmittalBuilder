@@ -212,25 +212,64 @@ def generate_binder_cover(date_str, to_name, to_company, to_addr1, to_addr2, pro
 def generate_section_cover(spec_section, product_name):
     """
     Returns a BytesIO containing a one-page section cover PDF.
+    - Spec Section (bold, large) auto-wraps/auto-shrinks to fit 2 lines.
+    - Product Name (bold, medium) wraps below it.
+    - Footer centered at bottom.
     """
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=LETTER)
-    width, height = LETTER
+    page_w, page_h = LETTER
+
+    # Background
     c.setFillColorRGB(1, 1, 1)
-    c.rect(0, 0, width, height, fill=1)
+    c.rect(0, 0, page_w, page_h, fill=1)
     c.setFillColorRGB(0, 0, 0)
 
-    # Title + subtitle
-    c.setFont(FONT_BOLD, 48)
-    c.drawCentredString(width / 2, height / 2 + 40, (spec_section or "").strip())
-    if product_name and product_name.strip():
-        c.setFont(FONT_BOLD, 32)
-        c.drawCentredString(width / 2, height / 2 - 40, product_name.strip())
+    # Layout constants
+    margin_x = 0.85 * inch
+    center_x = page_w / 2
+
+    # Reserve a tall box for the Spec Section title
+    title_box_top = page_h * 0.62     # a little above center
+    title_box_h   = 1.8 * inch
+    max_width     = page_w - 2 * margin_x
+
+    # Draw Spec Section (auto-fit, bold)
+    _ = draw_autofit_centered(
+        c,
+        text=spec_section,
+        center_x=center_x,
+        box_top_y=title_box_top,
+        box_height=title_box_h,
+        max_width=max_width,
+        font=FONT_BOLD,
+        max_size=48,
+        min_size=18,
+        target_lines=2,
+        line_gap=6,
+    )
+
+    # Product name below, slightly smaller; allow up to 3 lines
+    product_box_top = title_box_top - title_box_h - 0.25 * inch
+    product_box_h   = 1.2 * inch
+    draw_autofit_centered(
+        c,
+        text=product_name,
+        center_x=center_x,
+        box_top_y=product_box_top,
+        box_height=product_box_h,
+        max_width=max_width,
+        font=FONT_BOLD,
+        max_size=32,
+        min_size=14,
+        target_lines=3,
+        line_gap=4,
+    )
 
     # Footer
     footer_text = "Wiljo Interiors, Inc.   |   109 NE 38th Street, Oklahoma City, OK 73105"
     c.setFont(FONT_REG, 10)
-    c.drawCentredString(width / 2, 0.5 * inch, footer_text)
+    c.drawCentredString(page_w / 2, 0.5 * inch, footer_text)
 
     c.showPage()
     c.save()
