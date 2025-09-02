@@ -382,33 +382,135 @@ with st.form("spec_form", clear_on_submit=True):
             "pdfs": pdf_payloads
         })
 
-# Show current list and Clear All (with confirm)
+# Show current list and Clear All (with confirm)  — REPLACE YOUR EXISTING BLOCK WITH THIS
 if st.session_state.spec_data:
     st.subheader("Sections Added (in order)")
 
-    if st.session_state.confirm_clear:
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("✅ Yes, Clear All"):
+    # Clear All with confirmation
+    if "confirm_clear" not in st.session_state:
+        st.session_state.confirm_clear = False
+
+    clear_cols = st.columns([1, 1, 6])
+    with clear_cols[0]:
+        if not st.session_state.confirm_clear and st.button("🗑️ Clear All Sections"):
+            st.session_state.confirm_clear = True
+            st.rerun()
+    with clear_cols[1]:
+        if st.session_state.confirm_clear:
+            if st.button("✅ Yes, Clear"):
                 st.session_state.spec_data.clear()
                 st.session_state.confirm_clear = False
                 st.rerun()
-        with c2:
+    with clear_cols[2]:
+        if st.session_state.confirm_clear:
             if st.button("❌ Cancel"):
                 st.session_state.confirm_clear = False
                 st.rerun()
-    else:
-        if st.button("🗑️ Clear All Sections"):
-            st.session_state.confirm_clear = True
-            st.rerun()
 
-    for i, entry in enumerate(st.session_state.spec_data, start=1):
-        with st.expander(f"{i}. Spec Section: {entry['spec']} — {entry['product']}  ({len(entry.get('pdfs', []))} file(s))", expanded=True):
+    # Render each section with Up/Down/Edit/Delete and attachment editing
+    for i, entry in enumerate(st.session_state.spec_data):
+        exp = st.expander(
+            f"{i+1}. Spec Section: {(entry.get('spec') or '').strip()} — {(entry.get('product') or '').strip()}  "
+            f"({len(entry.get('pdfs', []))} file{'s' if len(entry.get('pdfs', [])) != 1 else ''})",
+            expanded=True
+        )
+
+        with exp:
+            # Top row controls
+            c_up, c_down, c_edit, c_del = st.columns([1, 1, 1, 1])
+            with c_up:
+                if st.button("⬆️ Up", key=f"up_{i}", disabled=(i == 0)):
+                    st.session_state.spec_data[i-1], st.session_state.spec_data[i] = (
+                        st.session_state.spec_data[i],
+                        st.session_state.spec_data[i-1],
+                    )
+                    st.rerun()
+            with c_down:
+                if st.button("⬇️ Down", key=f"down_{i}", disabled=(i == len(st.session_state.spec_data) - 1)):
+                    st.session_state.spec_data[i+1], st.session_state.spec_data[i] = (
+                        st.session_state.spec_data[i],
+                        st.session_state.spec_data[i+1],
+                    )
+                    st.rerun()
+            with c_edit:
+                if st.button("✏️ Edit", key=f"edit_toggle_{i}"):
+                    st.session_state[f"editing_{i}"] = not st.session_state.get(f"editing_{i}", False)
+            with c_del:
+                if st.button("🗑️ Delete", key=f"del_{i}"):
+                    st.session_state.spec_data.pop(i)
+                    st.rerun()
+
+            # READ-ONLY view (when not editing)
+            if not st.session_state.get(f"editing_{i}", False):
+                st.markdown("**Attached PDFs:**")
+                if entry.get("pdfs"):
+                    for p in entry["pdfs"]:
+                        st.caption(f"- {p['name']}")
+                else:
+                    st.caption("_None_")
+                st.divider()
+                continue
+
+            # EDIT MODE
+            st.markdown("**Edit Section**")
+            e_spec = st.text_input(
+                "Spec Section",
+                value=(entry.get("spec") or ""),
+                key=f"edit_spec_{i}"
+            )
+            e_prod = st.text_input(
+                "Product Name",
+                value=(entry.get("product") or ""),
+                key=f"edit_prod_{i}"
+            )
+
+            st.markdown("**Currently attached PDFs (uncheck to remove):**")
+            keep_flags = []
             if entry.get("pdfs"):
-                for p in entry["pdfs"]:
-                    st.caption(f"- {p['name']}")
+                for idx, p in enumerate(entry["pdfs"]):
+                    keep = st.checkbox(p["name"], value=True, key=f"keep_{i}_{idx}")
+                    keep_flags.append((idx, keep))
             else:
-                st.caption("No PDFs attached.")
+                st.caption("_None attached yet_")
+
+            st.markdown("**Attach additional PDFs from current uploads (optional):**")
+            add_files = st.multiselect(
+                "Pick from uploaded list above (Step 2)",
+                uploaded_pdfs or [],
+                format_func=lambda f: getattr(f, "name", "PDF"),
+                key=f"add_files_{i}"
+            )
+
+            c_save, c_cancel = st.columns([1, 1])
+            with c_save:
+                if st.button("💾 Save", key=f"save_{i}"):
+                    # Update spec/product
+                    st.session_state.spec_data[i]["spec"] = (e_spec or "").strip()
+                    st.session_state.spec_data[i]["product"] = (e_prod or "").strip()
+
+                    # Keep only checked current PDFs
+                    kept = []
+                    for idx, keep in keep_flags:
+                        if keep:
+                            kept.append(entry["pdfs"][idx])
+
+                    # Add selected new PDFs from current upload list
+                    added = []
+                    for f in add_files:
+                        try:
+                            added.append({"name": f.name, "data": f.getvalue()})
+                        except Exception:
+                            pass
+
+                    st.session_state.spec_data[i]["pdfs"] = kept + added
+                    st.session_state[f"editing_{i}"] = False
+                    st.rerun()
+
+            with c_cancel:
+                if st.button("↩️ Cancel", key=f"cancel_{i}"):
+                    st.session_state[f"editing_{i}"] = False
+                    st.rerun()
+
 
 # ---- Step 4: Generate Submittal Binder ----
 st.header("4) Generate Submittal Binder")
