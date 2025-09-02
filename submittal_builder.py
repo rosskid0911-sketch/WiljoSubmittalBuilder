@@ -18,6 +18,23 @@ import datetime
 
 # ---------- Page config ----------
 st.set_page_config(page_title="Wiljo Submittal Builder", layout="centered")
+# Background image from your GitHub repo (raw URL)
+BG_URL = "https://raw.githubusercontent.com/<username>/<repo>/<branch>/assets/background.jpg"
+
+st.markdown(f"""
+<style>
+[data-testid="stAppViewContainer"] {{
+    background-image: url("{BG_URL}");
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}}
+[data-testid="stHeader"] {{
+    background: rgba(0,0,0,0);
+}}
+</style>
+""", unsafe_allow_html=True)
+
 
 # ---------- Helpers ----------
 def resource_path(*parts):
