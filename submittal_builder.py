@@ -20,7 +20,7 @@ import datetime
 st.set_page_config(page_title="Wiljo Submittal Builder", layout="centered")
 
 # Background image from your GitHub repo (raw URL)
-BG_URL = "https://raw.githubusercontent.com/rosskid0911/<repo>/<branch>/assets/background.jpg"
+BG_URL = "https://raw.githubusercontent.com/rosskid0911-sketch/<repo>/<branch>/assets/background.jpg"
 
 st.markdown(f"""
 <style>
